@@ -113,7 +113,7 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 			return getSucc();
 		} else {
 			// TODO: Do the Web service call
-			return null;
+			return client.getSucc(info);
 		}
 	}
 
@@ -148,7 +148,7 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 			/*
 			 * TODO: Do the Web service call
 			 */
-			return null;
+			return client.getPred(info);
 		}
 	}
 
@@ -180,7 +180,7 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 				/*
 				 * TODO: Do the Web service call to the remote node.
 				 */
-				return null;
+				return client.closestPrecedingFinger(info, id);
 			} else {
 				/*
 				 * Without finger tables, just use the successor pointer.
@@ -344,6 +344,13 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 				/*
 				 * TODO Notify any listeners that the bindings have moved.
 				 */
+				state.getListeners().forEach(listener -> {
+					try{
+						listener.onMovedBinding(cand.getId());
+					} catch (Exception e) {
+						Log.warning(TAG, "Failed to notify listener of moved binding: " + e.getMessage());
+					}
+				});
 				Log.debug(TAG, "notify: Informing any nodes with listeners for transferred bindings");
 
 			}
