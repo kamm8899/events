@@ -480,7 +480,14 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 			 * 
 			 * TODO: Do the Web service call.
 			 */
-			return null;
+			try {
+				Key keyMsg = Key.newBuilder().setKey(k).build();
+				Bindings bindings = client.getBindings(n, keyMsg);
+				return bindings.getValueList().toArray(new String[0]);
+			} catch (Exception e) {
+				severe("Remote get failed for key: " + k + " on node " + n.getId() + " - " + e.getMessage());
+				throw new Failed("Remote get failed: " + e.getMessage());
+			}
 		}
 	}
 
@@ -507,6 +514,9 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 			/*
 			 * TODO: Do the Web service call.
 			 */
+			Key keyMsg = Key.newBuilder().setKey(k).build();
+			Binding bindingMsg = Binding.newBuilder().setKey(k).setValue(v).build();
+			client.addBinding(n, keyMsg, bindingMsg);
 		}
 	}
 
@@ -530,6 +540,13 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 			/*
 			 * TODO Notify any listeners
 			 */
+			state.getListeners().forEach(listener -> {
+				try {
+					listener.onNewBinding(k, v);
+				} catch (Exception e) {
+					Log.warning(TAG, "Failed to notify listener of new binding: " + e.getMessage());
+				}
+			});
 
 		} else if (!pred.hasNodeInfo() && isEqual(info, getSucc())) {
 			/*
@@ -539,6 +556,13 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 			/*
 			 * TODO Notify any listeners
 			 */
+			state.getListeners().forEach(listener -> {
+				try {
+					listener.onNewBinding(k, v);
+				} catch (Exception e) {
+					Log.warning(TAG, "Failed to notify listener of new binding: " + e.getMessage());
+				}
+			});
 
 		} else if (info.getId() == kid) {
 			/*
@@ -548,6 +572,13 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 			/*
 			 * TODO Notify any listeners
 			 */
+			state.getListeners().forEach(listener -> {
+				try {
+					listener.onNewBinding(k, v);
+				} catch (Exception e) {
+					Log.warning(TAG, "Failed to notify listener of new binding: " + e.getMessage());
+				}
+			});
 
 		} else if (!pred.hasNodeInfo() && !isEqual(info, getSucc())) {
 			severe("Add: predecessor is null but not a single-node network.");
@@ -571,6 +602,11 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 			/*
 			 * TODO: Do the Web service call.
 			 */
+			Binding bindingMsg = Binding.newBuilder()
+					.setKey(k)
+					.setValue(v)
+					.build();
+			client.delete(n, bindingMsg);
 
 		}
 	}
@@ -656,6 +692,38 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 		 * that it keeps its own bindings, to which it adds those it transfers
 		 * from us.
 		 */
+		// Create a NodeInfo for the contact node (the known peer)
+		NodeInfo contact = NodeInfo.newBuilder()
+				.setHost(host)
+				.setPort(port)
+				.build();
+
+		// Find the successor of our node ID by calling the contact node
+		succ = client.findSuccessor(contact, Id.newBuilder().setId(info.getId()).build());
+
+		// Set our local successor
+		setSucc(succ);
+
+		// Clear any local bindings (we are starting fresh)
+		state.clear();
+
+		// Extract our (currently empty) bindings to notify the successor
+		NodeBindings localBindings = state.extractBindings(info.getId());
+
+		// Notify the successor with our presence and bindings
+		OptNodeBindings received = client.notify(succ, localBindings);
+
+		// If the successor accepts us, install the bindings it transfers back
+		if (received != null && received.hasNodeBindings()) {
+			state.installBindings(received.getNodeBindings());
+		}
+
+		// Stabilize the ring to ensure bidirectional links
+		stabilize();
+
+		// Ask the successor to give us the bindings we should hold
+		//Map<String, String> bindings = getSucc().getBindings(info); // getSucc() returns a Node stub
+		//updateBindings(bindings);
 
 
 	}
@@ -689,14 +757,14 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 			 * TODO add the event producer as the listener to the state broadcaster
 			 * (Events will be pushed to the node requesting these updates).
 			 */
-
+			state.addListener(listenerId, key, eventProducer);
 		} else {
 			Log.debug(TAG, String.format("listenOn(%d,%s) 2", listenerId, key));
 			/*
 			 * TODO tell the client that they need to try again.
 			 * User is trying to register a listener for a binding that has moved.
 			 */
-
+			throw new IllegalArgumentException("Binding has moved: " + key + ". Please try again.");
 		}
 	}
 
@@ -706,6 +774,7 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 		Log.debug(TAG, String.format("listenOff(%d,%s) 1", listenerId, key));
 		// TODO remove event output stream from broadcaster
 
+		state.removeListener(listenerId, key);
 	}
 
 	/**
@@ -765,14 +834,14 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 				public void onNewBinding(String key, String value) {
 					Log.debug(TAG, String.format("onNewBinding(%s,%s)", key, value));
 					// TODO report a new binding added for key to value
-
+					bindingEventListener.onNewBinding(key, value);
 				}
 
 				@Override
 				public void onMovedBinding(String key) {
 					Log.debug(TAG, String.format("onMovedBinding(%s)", key));
 					// TODO transfer listen notifier from previous node to new node
-
+					transferListener(key, bindingEventListener);
 				}
 
 				@Override
@@ -802,7 +871,23 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 		 * local record of the listener, otherwise it would get confused with
 		 * the new record if a new listener is added (e.g. after moving listener).
 		 */
+		if (target != null) {
+			// Create subscription message with our node ID
+			NodeInfo myInfo = getNodeInfo();
+			Subscription subscription = Subscription.newBuilder()
+					.setId(myInfo.getId())
+					.setKey(key)
+					.build();
 
+			// Make web service call to stop event generation
+			client.listenOff(target, subscription);
+
+			// Remove local record of listener
+			state.stopListening(key);
+
+			Log.debug(TAG, String.format("stopListening: Stopped listening for %s at node %d",
+					key, target.getId()));
+		}
 	}
 
 	public void listeners(OutputStream out) {

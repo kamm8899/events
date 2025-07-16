@@ -46,7 +46,66 @@ public class NodeService extends DhtServiceImplBase {
 	}
 	
 	// TODO: add the missing operations
+	@Override
+	public void getPred(Empty empty, StreamObserver<OptNodeInfo> responseObserver) {
+		Log.weblog(TAG, "getPred()");
+		responseObserver.onNext(getDht().getPred());
+		responseObserver.onCompleted();
+	}
 
+	@Override
+	public void getSucc(Empty empty, StreamObserver<NodeInfo> responseObserver) {
+		Log.weblog(TAG, "getSucc()");
+		responseObserver.onNext(getDht().getSucc());
+		responseObserver.onCompleted();
+	}
+
+	@Override
+	public void findSuccessor(Id id, StreamObserver<NodeInfo> responseObserver) {
+		Log.weblog(TAG, "findSuccessor(" + id.getId() + ")");
+		try {
+			NodeInfo result = getDht().findSuccessor(id.getId());
+			responseObserver.onNext(result);
+			responseObserver.onCompleted();
+		} catch (Failed e) {
+			error("findSuccessor failed", e);
+			responseObserver.onError(e);
+		}
+	}
+
+	@Override
+	public void notify(NodeBindings request, StreamObserver<OptNodeBindings> responseObserver) {
+		Log.weblog(TAG, "notify(" + request.getInfo().getId() + ")");
+		OptNodeBindings result = getDht().notify(request);
+		responseObserver.onNext(result);
+		responseObserver.onCompleted();
+	}
+
+	@Override
+	public void addBinding(Binding request, StreamObserver<Empty> responseObserver) {
+		Log.weblog(TAG, "addBinding()");
+		try {
+			getDht().addBinding(request.getKey(), request.getValue());
+			responseObserver.onNext(Empty.getDefaultInstance());
+			responseObserver.onCompleted();
+		} catch (Failed e) {
+			error("addBinding failed", e);
+			responseObserver.onError(e);
+		}
+	}
+
+	@Override
+	public void getBindings(Key request, StreamObserver<Bindings> responseObserver) {
+		Log.weblog(TAG, "getBindings(" + request.getKey() + ")");
+		try {
+			Bindings bindings = getDht().getBindings(request.getKey());
+			responseObserver.onNext(bindings);
+			responseObserver.onCompleted();
+		} catch (Failed e) {
+			error("getBindings failed", e);
+			responseObserver.onError(e);
+		}
+	}
 	private void error(String mesg, Exception e) {
 		logger.log(Level.SEVERE, mesg, e);
 	}

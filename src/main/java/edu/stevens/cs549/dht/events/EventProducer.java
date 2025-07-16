@@ -24,13 +24,24 @@ public class EventProducer implements IEventListener {
     @Override
     public void onNewBinding(String key, String value) {
         // TODO emit new binding event to listening client.
-
+        Event event = Event.newBuilder()
+                .setBinding(Binding.newBuilder()
+                        .setKey(key)
+                        .setValue(value)
+                        .build())
+                .build();
+        observer.onNext(event);
     }
 
     @Override
     public void onMovedBinding(String key) {
         // TODO emit moved binding event to listening client.
-
+        Event event = Event.newBuilder()
+                .setMovedBinding(Binding.newBuilder()
+                        .setKey(key)
+                        .build())
+                .build();
+        observer.onNext(event);
     }
 
     @Override

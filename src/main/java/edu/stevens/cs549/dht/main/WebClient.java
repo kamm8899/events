@@ -86,7 +86,29 @@ public class WebClient {
 	public OptNodeBindings notify(NodeInfo node, NodeBindings predDb) throws DhtBase.Failed {
 		Log.weblog(TAG, "notify("+node.getId()+")");
 		// TODO
-		throw new IllegalStateException("notify() not yet implemented");
+		Log.weblog(TAG, "notify(" + node.getId() + ")");
+
+		try {
+			// Create a stub for the target node
+			DhtServiceGrpc.DhtServiceBlockingStub stub = getStub(node);
+
+			// Make the remote call to notify the target node
+			OptNodeBindings response = stub.notify(predDb);
+
+			// Check if the response contains bindings
+			if (response == null || !response.hasNodeBindings()) {
+				Log.weblog(TAG, "notify(" + node.getId() + ") was rejected or returned no bindings.");
+				return null;
+			}
+
+			// Log success and return the bindings
+			Log.weblog(TAG, "notify(" + node.getId() + ") accepted.");
+			return response;
+
+		} catch (Exception e) {
+			error("Notify failed for node " + node.getId(), e);
+			throw new DhtBase.Failed("Notify RPC failed: " + e.getMessage());
+		}
 		/*
 		 * The protocol here is more complex than for other operations. We
 		 * notify a new successor that we are its predecessor, and expect its
@@ -97,19 +119,97 @@ public class WebClient {
 		 * null. This is represented in HTTP by RC=304 (Not Modified).
 		 */
 	}
+	public NodeInfo findSuccessor(NodeInfo node, Id id) throws DhtBase.Failed {
+		Log.weblog(TAG, "findSuccessor(" + id.getId() + ") at node " + node.getId());
+		try {
+			return getStub(node).findSuccessor(id);
+		} catch (Exception e) {
+			error("findSuccessor RPC failed", e);
+			throw new DhtBase.Failed("findSuccessor RPC failed");
+		}
+	}
+	public NodeInfo closestPrecedingFinger(NodeInfo node, int id) throws DhtBase.Failed {
+		Log.weblog(TAG, "closestPrecedingFinger(" + id + ") at node " + node.getId());
+		try {
+			Id request = Id.newBuilder().setId(id).build();
+			return getStub(node).closestPrecedingFinger(request);
+		} catch (Exception e) {
+			error("closestPrecedingFinger RPC failed", e);
+			throw new DhtBase.Failed("closestPrecedingFinger RPC failed");
+		}
+	}
 
-	/*
+	public NodeInfo getSucc(NodeInfo node) throws DhtBase.Failed {
+		Log.weblog(TAG, "getSucc(" + node.getId() + ")");
+		try {
+			return getStub(node).getSucc(Empty.getDefaultInstance());
+		} catch (Exception e) {
+			error("getSucc RPC failed", e);
+			throw new DhtBase.Failed("getSucc RPC failed");
+		}
+	}
+	public void addBinding(NodeInfo node, Key key, Binding val) throws DhtBase.Failed {
+		Log.weblog(TAG, "addBinding(" + key.getKey() + ", " + val.getValue() + ") at node " + node.getId());
+		try {
+			// Build a simple Binding message
+			Binding binding = Binding.newBuilder()
+					.setKey(key.getKey())
+					.setValue(val.getValue())
+					.build();
+
+			getStub(node).addBinding(binding);  // ✅ now using correct type
+		} catch (Exception e) {
+			error("addBinding RPC failed", e);
+			throw new DhtBase.Failed("addBinding RPC failed");
+		}
+	}
+	public Bindings getBindings(NodeInfo node, Key key) throws DhtBase.Failed {
+		Log.weblog(TAG, "getBindings(" + key.getKey() + ") at node " + node.getId());
+		try {
+			return getStub(node).getBindings(key);
+		} catch (Exception e) {
+			error("getBindings RPC failed", e);
+			throw new DhtBase.Failed("getBindings RPC failed");
+		}
+	}
+
+}
+
+/*
 	 * Listening for new bindings.
 	 */
 	public void listenOn(NodeInfo node, Subscription subscription, IEventListener listener) throws DhtBase.Failed {
 		Log.weblog(TAG, "listenOn("+node.getId()+")");
 		// TODO listen for updates for the key specified in the subscription
+		try {
+			// Create a streaming stub for the target node
+			DhtServiceStub asyncStub = getListenerStub(node);
 
+			// Create event consumer to handle streaming events
+			EventConsumer eventConsumer = new EventConsumer(listener);
+
+			// Start listening for events using the subscription
+			asyncStub.listen(subscription, eventConsumer);
+
+		} catch (Exception e) {
+			error("listenOn RPC failed", e);
+			throw new DhtBase.Failed("listenOn RPC failed: " + e.getMessage());
+		}
 	}
 
 	public void listenOff(NodeInfo node, Subscription subscription) throws DhtBase.Failed {
 		Log.weblog(TAG, "listenOff("+node.getId()+")");
 		// TODO stop listening for updates on bindings to the key in the subscription
+		try{
+			// Get the stub for the node
+			DhtServiceStub asyncStub = getListenerStub(node);
+
+			// Stop listening by sending the unsubscribe request
+			asyncStub.listenOff(subscription, new EventConsumer(null));
+
+		} catch (Exception e) {
+			error("listenOff RPC failed", e);
+			throw new DhtBase.Failed("listenOff RPC failed: " + e.getMessage());
 	}
 	
 }
