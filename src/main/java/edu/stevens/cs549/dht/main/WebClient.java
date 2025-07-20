@@ -173,43 +173,46 @@ public class WebClient {
 		}
 	}
 
-}
+	public void deleteBinding(NodeInfo node, Binding b) throws DhtBase.Failed {
+		Log.weblog(TAG, "deleteBinding(" + b.getKey() + ") at node " + node.getId());
+		try {
+			getStub(node).deleteBinding(b);
+		} catch (Exception e) {
+			error("deleteBinding RPC failed", e);
+			throw new DhtBase.Failed("deleteBinding RPC failed: " + e.getMessage());
+		}
+	}
+
 
 /*
 	 * Listening for new bindings.
 	 */
-	public void listenOn(NodeInfo node, Subscription subscription, IEventListener listener) throws DhtBase.Failed {
-		Log.weblog(TAG, "listenOn("+node.getId()+")");
-		// TODO listen for updates for the key specified in the subscription
-		try {
-			// Create a streaming stub for the target node
-			DhtServiceStub asyncStub = getListenerStub(node);
-
-			// Create event consumer to handle streaming events
-			EventConsumer eventConsumer = new EventConsumer(listener);
-
-			// Start listening for events using the subscription
-			asyncStub.listen(subscription, eventConsumer);
-
-		} catch (Exception e) {
-			error("listenOn RPC failed", e);
-			throw new DhtBase.Failed("listenOn RPC failed: " + e.getMessage());
-		}
+// TODO listen for updates for the key specified in the subscription
+public void listenOn(NodeInfo node, Subscription subscription, IEventListener listener)
+		throws DhtBase.Failed {
+	info("listenOn(" + node.getId() + ")");
+	try {
+		DhtServiceStub asyncStub = getListenerStub(node);
+		       asyncStub.listenOn(
+					   subscription,
+					   new EventConsumer(listener)
+			   );
+	} catch (Exception e) {
+		error("listenOn RPC failed", e);
+		throw new DhtBase.Failed("listenOn RPC failed: " + e.getMessage());
 	}
+}
 
-	public void listenOff(NodeInfo node, Subscription subscription) throws DhtBase.Failed {
-		Log.weblog(TAG, "listenOff("+node.getId()+")");
-		// TODO stop listening for updates on bindings to the key in the subscription
-		try{
-			// Get the stub for the node
-			DhtServiceStub asyncStub = getListenerStub(node);
-
-			// Stop listening by sending the unsubscribe request
-			asyncStub.listenOff(subscription, new EventConsumer(null));
-
-		} catch (Exception e) {
-			error("listenOff RPC failed", e);
-			throw new DhtBase.Failed("listenOff RPC failed: " + e.getMessage());
+	// TODO stop listening for updates on bindings to the key in the subscription
+public void listenOff(NodeInfo node, Subscription subscription) throws DhtBase.Failed {
+	info("listenOff(" + node.getId() + ")");
+	try {
+		DhtServiceBlockingStub stub = getStub(node);
+		stub.listenOff(subscription);
+	} catch (Exception e) {
+		error("listenOff RPC failed", e);
+		throw new DhtBase.Failed("listenOff RPC failed: " + e.getMessage());
 	}
-	
+}
+
 }

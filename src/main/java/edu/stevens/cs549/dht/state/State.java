@@ -251,7 +251,7 @@ public class State implements IState, IRouting {
 		}
 		return info;
 	}
-	}
+
 
 	public synchronized void routes() {
 		PrintWriter wr = new PrintWriter(System.out);
@@ -280,7 +280,7 @@ public class State implements IState, IRouting {
 	/*
 	 * Client-side of listening: Remember who has the bindings we're listening on.
 	 */
-	protected Map<String,NodeInfo> bindingMap = new HashMap<>();
+	protected Map<String, NodeInfo> bindingMap = new HashMap<>();
 
 	protected ExecutorService executors = Executors.newFixedThreadPool(5);
 
@@ -322,9 +322,9 @@ public class State implements IState, IRouting {
 
 	@Override
 	public void stopListening(String key) {
-		Log.debug(TAG, "stopListening: Removing record that we are listening on "+key);
+		Log.debug(TAG, "stopListening: Removing record that we are listening on " + key);
 		bindingMap.remove(key);
-		Log.debug(TAG, String.format("stopListening: bindingMap.get(%s)="+bindingMap.get(key), key));
+		Log.debug(TAG, String.format("stopListening: bindingMap.get(%s)=" + bindingMap.get(key), key));
 	}
 
 	@Override
@@ -340,5 +340,6 @@ public class State implements IState, IRouting {
 		}
 		wr.flush();
 	}
+
 
 }

@@ -2,6 +2,7 @@ package edu.stevens.cs549.dht.events;
 
 import com.google.protobuf.Empty;
 import edu.stevens.cs549.dht.rpc.Binding;
+import edu.stevens.cs549.dht.rpc.Bindings;
 import edu.stevens.cs549.dht.rpc.Event;
 import io.grpc.stub.StreamObserver;
 
@@ -24,24 +25,24 @@ public class EventProducer implements IEventListener {
     @Override
     public void onNewBinding(String key, String value) {
         // TODO emit new binding event to listening client.
-        Event event = Event.newBuilder()
-                .setBinding(Binding.newBuilder()
-                        .setKey(key)
-                        .setValue(value)
-                        .build())
+        Event e = Event.newBuilder()
+                .setNewBinding(
+                        Binding.newBuilder()
+                                .setKey(key)
+                                .setValue(value)
+                                .build()
+                )
                 .build();
-        observer.onNext(event);
+        observer.onNext(e);
     }
 
     @Override
     public void onMovedBinding(String key) {
         // TODO emit moved binding event to listening client.
-        Event event = Event.newBuilder()
-                .setMovedBinding(Binding.newBuilder()
-                        .setKey(key)
-                        .build())
+        Event e = Event.newBuilder()
+                .setMovedBinding(Empty.getDefaultInstance())
                 .build();
-        observer.onNext(event);
+        observer.onNext(e);
     }
 
     @Override
