@@ -1,11 +1,9 @@
 package edu.stevens.cs549.dht.activity;
 
-import edu.stevens.cs549.dht.activity.DhtBase;
-import edu.stevens.cs549.dht.activity.DhtBase.Failed;
-import edu.stevens.cs549.dht.activity.DhtBase.Invalid;
-import edu.stevens.cs549.dht.activity.IDhtService;
-import edu.stevens.cs549.dht.activity.IDhtNode;
-import edu.stevens.cs549.dht.activity.IDhtBackground;
+import java.util.Collection;
+import edu.stevens.cs549.dht.events.IEventBroadcaster;
+import edu.stevens.cs549.dht.events.IEventListener;
+import edu.stevens.cs549.dht.events.EventProducer;
 import edu.stevens.cs549.dht.events.IBindingEventListener;
 import edu.stevens.cs549.dht.events.IEventListener;
 import edu.stevens.cs549.dht.events.EventProducer;
@@ -348,31 +346,25 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 			 */
 			NodeBindings db;
 			synchronized (state) {
-				Log.debug(TAG, "notify: Transferring bindings back to new predecessor with id "+cand.getId());
+				Log.debug(TAG, "notify: Transferring bindings back to new predecessor with id " + cand.getId());
 				db = transferBindings(cand.getId());
 				/*
 				 * TODO Notify any listeners that the bindings have moved.
 				 */
-				for(Bindings b: db.getBindingsList()){
-					for(IEventListener listener:state.getBroadcaster().getListeners()) {
-						try {
-							listener.onMovedBinding(b.getKey());
-						} catch (Exception e) {
-							Log.warning(TAG, "Failed to notify listener of moved binding: " + e.getMessage());
-						}
-					}
+				for (Bindings b : db.getBindingsList()) {
+					state.getBroadcaster().broadcastMovedBinding(b.getKey());
 				}
+
 				Log.debug(TAG, "notify: Informing any nodes with listeners for transferred bindings");
+				state.backupBindings(predDb);
+				Log.debug(TAG, String.format("Transferring %d bindings back to node id=%d", db.getBindingsList().size(), cand.getId()));
+				return OptNodeBindings.newBuilder().setNodeBindings(db).build();
 			}
-			state.backupBindings(predDb);
-			Log.debug(TAG, String.format("Transferring %d bindings back to node id=%d", db.getBindingsList().size(), cand.getId()));
-			return OptNodeBindings.newBuilder().setNodeBindings(db).build();
-		} else {
-			return OptNodeBindings.getDefaultInstance();
 		}
+				return OptNodeBindings.getDefaultInstance();
+			}
 
 
-	}
 
 	/*
 	 * Process the result of a notify to a potential successor node.
@@ -546,15 +538,9 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 			/*
 			 * TODO Notify any listeners
 			 */
-			for (IEventListener listener:state.getBroadcaster().getListeners()) {
-				try {
-					listener.onNewBinding(k, v);
-				} catch (Exception e) {
-					Log.warning(TAG, "Failed to notify listener of new binding: " + e.getMessage());
-				}
-			}
+			state.getBroadcaster().broadcastNewBinding(k, v);
+		}else if (!pred.hasNodeInfo() && isEqual(info, getSucc())) {
 
-		} else if (!pred.hasNodeInfo() && isEqual(info, getSucc())) {
 			/*
 			 * Single-node network.
 			 */
@@ -562,13 +548,7 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 			/*
 			 * TODO Notify any listeners
 			 */
-			for(IEventListener listener:state.getBroadcaster().getListeners()) {
-				try {
-					listener.onNewBinding(k, v);
-				} catch (Exception e) {
-					Log.warning(TAG, "Failed to notify listener of new binding: " + e.getMessage());
-				}
-			};
+			state.getBroadcaster().broadcastNewBinding(k, v);
 
 		} else if (info.getId() == kid) {
 			/*
@@ -578,15 +558,10 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 			/*
 			 * TODO Notify any listeners
 			 */
-			for (IEventListener listener:state.getBroadcaster().getListeners()) {
-				try {
-					listener.onNewBinding(k, v);
-				} catch (Exception e) {
-					Log.warning(TAG, "Failed to notify listener of new binding: " + e.getMessage());
-				}
-			};
+			state.getBroadcaster().broadcastNewBinding(k, v);
 
-		} else if (!pred.hasNodeInfo() && !isEqual(info, getSucc())) {
+
+		}else if (!pred.hasNodeInfo() && !isEqual(info, getSucc())) {
 			severe("Add: predecessor is null but not a single-node network.");
 		} else {
 			throw new Invalid("Invalid key: " + k + " (id=" + kid + ")");
@@ -601,7 +576,7 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 			try {
 				delete(k, v);
 			} catch (Invalid e) {
-				severe("Delete: invalid internal inputs: " + e);
+				severe("Delete: invalid interfnal inputs: " + e);
 				throw new IllegalArgumentException(e);
 			}
 		} else {
@@ -699,12 +674,16 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 		 * from us.
 		 */
 		// Create a NodeInfo for the contact node (the known peer)
-		   NodeInfo contact = NodeInfo.newBuilder()
-				       .setHost(host)
-				       .setPort(port)
-				       .build();
-		   succ = client.findSuccessor(contact, Id.newBuilder().setId(info.getId()).build());
-		   setSucc(succ);
+		NodeInfo contact = NodeInfo.newBuilder()
+				.setHost(host)
+				.setPort(port)
+				.build();
+
+		// Find the successor of our node ID by calling the contact node
+		succ = client.findSuccessor(contact, Id.newBuilder().setId(info.getId()).build());
+
+		// Set our local successor
+		setSucc(succ);
 
 		// Clear any local bindings (we are starting fresh)
 		state.clear();
@@ -726,6 +705,8 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 		// Ask the successor to give us the bindings we should hold
 		//Map<String, String> bindings = getSucc().getBindings(info); // getSucc() returns a Node stub
 		//updateBindings(bindings);
+
+
 
 
 	}
@@ -891,7 +872,6 @@ public class Dht extends DhtBase implements IDhtService, IDhtNode, IDhtBackgroun
 		state.listeningFor(out);
 	}
 
-
-
-
 }
+
+

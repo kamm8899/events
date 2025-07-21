@@ -85,10 +85,10 @@ public class NodeService extends DhtServiceImplBase {
 	public void addBinding(Binding request, StreamObserver<Empty> responseObserver) {
 		Log.weblog(TAG, "addBinding()");
 		try {
-			getDht().addBinding(request.getKey(), request.getValue());
+			getDht().add(request.getKey(), request.getValue());
 			responseObserver.onNext(Empty.getDefaultInstance());
 			responseObserver.onCompleted();
-		} catch (Failed e) {
+		} catch (Invalid e) {
 			error("addBinding failed", e);
 			responseObserver.onError(e);
 		}
@@ -98,11 +98,30 @@ public class NodeService extends DhtServiceImplBase {
 	public void getBindings(Key request, StreamObserver<Bindings> responseObserver) {
 		Log.weblog(TAG, "getBindings(" + request.getKey() + ")");
 		try {
-			Bindings bindings = getDht().getBindings(request.getKey());
-			responseObserver.onNext(bindings);
+			String[] values = getDht().get(request.getKey());
+			Bindings.Builder builder = Bindings.newBuilder()
+					.setKey(request.getKey());
+			if (values != null) {
+				for (String value : values) {
+					builder.addValue(value);
+				}
+			}
+			responseObserver.onNext(builder.build());
 			responseObserver.onCompleted();
-		} catch (Failed e) {
+		} catch (Invalid e) {
 			error("getBindings failed", e);
+			responseObserver.onError(e);
+		}
+	}
+	@Override
+	public void deleteBinding(Binding request, StreamObserver<Empty> responseObserver) {
+		Log.weblog(TAG, "deleteBinding()");
+		try {
+			getDht().delete(request.getKey(), request.getValue());
+			responseObserver.onNext(Empty.getDefaultInstance());
+			responseObserver.onCompleted();
+		} catch (Invalid e) {
+			error("deleteBinding failed", e);
 			responseObserver.onError(e);
 		}
 	}
@@ -114,6 +133,41 @@ public class NodeService extends DhtServiceImplBase {
 	public void getNodeInfo(Empty empty, StreamObserver<NodeInfo> responseObserver) {
 		Log.weblog(TAG, "getNodeInfo()");
 		responseObserver.onNext(getDht().getNodeInfo());
+		responseObserver.onCompleted();
+	}
+
+	@Override
+	public void listenOn(Subscription request, StreamObserver<Event> responseObserver) {
+		Log.weblog(TAG, "listenOn(" + request.getId() + "," + request.getKey() + ")");
+		try {
+			// Create an event producer that will send events to the client
+			EventProducer producer = EventProducer.create(responseObserver);
+			// Register the producer as a listener for the specified key
+			getDht().listenOn(request.getId(), request.getKey(), producer);
+		} catch (Exception e) {
+			error("listenOn failed", e);
+			responseObserver.onError(e);
+		}
+	}
+
+	@Override
+	public void listenOff(Subscription request, StreamObserver<Empty> responseObserver) {
+		Log.weblog(TAG, "listenOff(" + request.getId() + "," + request.getKey() + ")");
+		try {
+			// Remove the listener for the specified key
+			getDht().listenOff(request.getId(), request.getKey());
+			responseObserver.onNext(Empty.getDefaultInstance());
+			responseObserver.onCompleted();
+		} catch (Exception e) {
+			error("listenOff failed", e);
+			responseObserver.onError(e);
+		}
+	}
+	@Override
+	public void closestPrecedingFinger(Id request, StreamObserver<NodeInfo> responseObserver) {
+		Log.weblog(TAG, "closestPrecedingFinger(" + request.getId() + ")");
+		NodeInfo result = getDht().closestPrecedingFinger(request.getId());
+		responseObserver.onNext(result);
 		responseObserver.onCompleted();
 	}
 

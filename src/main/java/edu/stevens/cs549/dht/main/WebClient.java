@@ -195,7 +195,7 @@ public void listenOn(NodeInfo node, Subscription subscription, IEventListener li
 		DhtServiceStub asyncStub = getListenerStub(node);
 		       asyncStub.listenOn(
 					   subscription,
-					   new EventConsumer(listener)
+					   EventConsumer.create(subscription.getKey(), listener)
 			   );
 	} catch (Exception e) {
 		error("listenOn RPC failed", e);
